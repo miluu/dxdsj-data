@@ -47,6 +47,7 @@ type ModelLivenews struct {
 	UpdatedAt         int64         `bson:"updatedAt" json:"updatedAt"`
 	ContentHtml       string        `bson:"contentHtml" json:"contentHtml"`
 	ChannelSet        []int         `bson:"channelSet" json:"channelSet"`
+	CategorySet       []int         `bson:"categorySet" json:"categorySet"`
 	ImageUrls         []string      `bson:"imageUrls" json:"imageUrls"`
 	OriginalImageUrls []string      `bson:"orginalImageUrls" json:"orginalImageUrls"`
 	Del               bool          `bson:"del" json:"del"`
@@ -61,6 +62,7 @@ type LivenewsOriginal struct {
 	UpdatedAt   string   `bson:"updatedAt" json:"updatedAt"`
 	ContentHtml string   `bson:"contentHtml" json:"contentHtml"`
 	ChannelSet  string   `bson:"channelSet" json:"channelSet"`
+	CategorySet string   `bson:"categorySet" json:"categorySet"`
 	ImageUrls   []string `bson:"imageUrls" json:"imageUrls"`
 }
 
@@ -112,6 +114,16 @@ func AddLivenews(ori LivenewsOriginal, col *mgo.Collection, path string) (msg st
 			channelSetIntArr = append(channelSetIntArr, i)
 		}
 	}
+	categorySetStrArr := strings.Split(ori.CategorySet, ",")
+	categorySetIntArr := []int{}
+	for _, v := range categorySetStrArr {
+		if i, err4 := strconv.Atoi(v); err4 != nil {
+			err = err4
+			return
+		} else {
+			categorySetIntArr = append(categorySetIntArr, i)
+		}
+	}
 	imageUrls := []string{}
 	for _, imgUrl := range ori.ImageUrls {
 		name := bson.NewObjectId().Hex()
@@ -125,6 +137,7 @@ func AddLivenews(ori LivenewsOriginal, col *mgo.Collection, path string) (msg st
 		imageUrls = append(imageUrls, name)
 	}
 	m.ChannelSet = channelSetIntArr
+	m.CategorySet = categorySetIntArr
 	m.Title = util.ClearHtmlTags(ori.Title)
 	m.Type = ori.Type
 	m.ContentHtml = util.ClearHtmlTags(ori.ContentHtml)
