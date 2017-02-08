@@ -54,6 +54,7 @@ func GetPreMonth(y, m int) (year, month int) {
 	}
 	return
 }
+
 func GetNextMonth(y, m int) (year, month int) {
 	month = m + 1
 	year = y
@@ -63,6 +64,7 @@ func GetNextMonth(y, m int) (year, month int) {
 	}
 	return
 }
+
 func FormatDate(y, m, d int) string {
 	str := strconv.Itoa(y) + "-" + strconv.Itoa(m) + "-" + strconv.Itoa(d)
 	return str

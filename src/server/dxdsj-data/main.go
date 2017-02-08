@@ -48,14 +48,12 @@ func main() {
 	//Init Begin
 	mon := mongo.NewMongoPool("", conf.MgoDns, conf.MgoMode, conf.MgoRefresh, 0, 0, 100)
 	monLivenews := mon.C(ColLivenews)
-	monSavedPage := mon.C(ColSavedPage)
 	monCalendar := mon.C(ColCalendar)
 	monSavedCalendar := mon.C(ColSavedCalendar)
 	defer mon.Close()
 	base := &Base{
 		Config:           conf,
 		ColLivenews:      monLivenews,
-		ColSavedPage:     monSavedPage,
 		ColCalendar:      monCalendar,
 		ColSavedCalendar: monSavedCalendar,
 	}
@@ -63,18 +61,18 @@ func main() {
 
 	processor := NewProcessor(base)
 	processor.GetLastLivenews()
-	processor.GetLivenews()
-	processor.AutoGetCalendar()
-	processor.UpdateNewCalendar()
+	processor.AutoGetLivenews()
+	// processor.AutoGetCalendar()
+	// processor.UpdateNewCalendar()
 
 	timer := time.NewTicker(conf.TimeInterval * time.Second)
 	for {
 		select {
 		case <-timer.C:
 			processor.GetLastLivenews()
-			processor.GetLivenews()
-			processor.AutoGetCalendar()
-			processor.UpdateNewCalendar()
+			processor.AutoGetLivenews()
+			// processor.AutoGetCalendar()
+			// processor.UpdateNewCalendar()
 		}
 	}
 }

@@ -2,12 +2,14 @@ package controller
 
 import (
 	"encoding/json"
+	"errors"
 	"golanger.com/log"
 	"golanger.com/net/http/client"
 	. "haiyi/model"
 	"haiyi/util"
 	"io/ioutil"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -21,80 +23,158 @@ func NewProcessor(b *Base) *Processor {
 	}
 }
 
-func (p *Processor) GetLivenews() {
-	lastSavedPage, err := GetLastSavedPage(p.ColSavedPage.C())
-	if err != nil {
-		log.Error("<GetLivenews> err: ", err)
-		return
-	}
-	page := lastSavedPage + 1
-	if page > 1000 {
-		return
-	}
-	url := "http://api.wallstreetcn.com/v2/livenews?order=-created_at&limit=100&channelId=0&extractImg=1&extractText=1&page=" + strconv.Itoa(page)
-	if resp, err := client.NewClient().Get(url); err != nil {
-		log.Error("<GetLivenews> err: ", err)
-		return
+func (p *Processor) GetLastLivenews() {
+	if data, err := p.getLivenews(""); err != nil {
+		log.Error("<GetLastLivenews> err: ", err)
 	} else {
-		defer resp.Body.Close()
-		if resp.StatusCode != 200 {
-			log.Error("<GetLivenews> status code:", resp.StatusCode, " error:", err)
-			return
-		}
-		if body, err := ioutil.ReadAll(resp.Body); err != nil {
-			log.Error("<GetLivenews> err:", err)
-			return
-		} else {
-			originalNews := LivenewsOriginalData{}
-			if err := json.Unmarshal(body, &originalNews); err != nil {
-				log.Error("<GetLivenews> err: ", err)
+		for _, v := range data {
+			arr := strings.Split(v, "#")
+			m := ModelLivenews{}
+			if arr[0] == "0" {
+				obj, err := p.transferNews(arr, v)
+				if err != nil {
+					log.Error("<GetLastLivenews> err: ", err)
+					continue
+				}
+				m = obj
+			} else if arr[0] == "1" {
+				obj, err := p.transferData(arr, v)
+				if err != nil {
+					log.Error("<GetLastLivenews> err: ", err)
+					continue
+				}
+				m = obj
+			}
+			if msg, err := AddLivenews(m, p.ColLivenews.C(), true, p.Config.SaveImgPath); err != nil {
+				log.Error("<GetLastLivenews> err: ", err)
+			} else if msg == "exist" {
+				log.Debug("<GetLastLivenews> livenews exist")
 				return
+			} else {
+				log.Debug("<GetLastLivenews> add a livenews")
 			}
-			for _, livenews := range originalNews.Results {
-				if _, err := AddLivenews(livenews, p.ColLivenews.C(), p.Config.SaveImgPath); err != nil {
-					log.Error("<GetLivenews> err: ", err)
-				} /* else if msg == "exist" {
-					log.Debug("<GetLivenews> exist.")
-				} else {
-					log.Debug("<GetLivenews> saved.")
-				}*/
-			}
-			AddSavedPage(page, p.ColSavedPage.C())
 		}
 	}
 }
 
-func (p *Processor) GetLastLivenews() {
-	url := "http://api.wallstreetcn.com/v2/livenews?order=-created_at&limit=20&channelId=0&extractImg=1&extractText=1"
-	if resp, err := client.NewClient().Get(url); err != nil {
-		log.Error("<GetLastLivenews> err: ", err)
+func (p *Processor) AutoGetLivenews() {
+	if count, err := GetLivenewsCount(p.ColLivenews.C()); err != nil {
+		log.Error("<AutoGetLivenews> err: ", err)
+		return
+	} else {
+		log.Debug("<AutoGetLivenews> count: ", count)
+	} /*else if count > 20000 {
+		return
+	}*/
+	maxId, err := GetOldestLivenewsOriginalId(p.ColLivenews.C())
+	if err != nil {
+		log.Error("<AutoGetLivenews> err: ", err)
+		return
+	}
+	log.Debug("<AutoGetLivenews> maxId: ", maxId)
+	if data, err := p.getLivenews(maxId); err != nil {
+		log.Error("<AutoGetLivenews> err: ", err)
+	} else {
+		for _, v := range data {
+			arr := strings.Split(v, "#")
+			m := ModelLivenews{}
+			if arr[0] == "0" {
+				obj, err := p.transferNews(arr, v)
+				if err != nil {
+					log.Error("<AutoGetLivenews> err: ", err)
+					continue
+				}
+				m = obj
+			} else if arr[0] == "1" {
+				obj, err := p.transferData(arr, v)
+				if err != nil {
+					log.Error("<AutoGetLivenews> err: ", err)
+					continue
+				}
+				m = obj
+			}
+			if msg, err := AddLivenews(m, p.ColLivenews.C(), true, p.Config.SaveImgPath); err != nil {
+				log.Error("<AutoGetLivenews> err: ", err)
+			} else if msg == "exist" {
+				log.Debug("<AutoGetLivenews> livenews exist")
+				continue
+			} else {
+				log.Debug("<AutoGetLivenews> add a livenews")
+			}
+		}
+	}
+
+}
+
+func (p *Processor) getLivenews(maxId string) (data []string, err error) {
+	url := "http://m.jin10.com/flash?maxId=" + maxId
+	if resp, err1 := client.NewClient().Get(url); err1 != nil {
+		err = err1
 		return
 	} else {
 		defer resp.Body.Close()
 		if resp.StatusCode != 200 {
-			log.Error("<LivenewsApi> status code:", resp.StatusCode, " error:", err)
+			err = errors.New("error status: " + resp.Status)
+			log.Error("<getLivenews> status code:", resp.StatusCode)
 			return
 		}
-		if body, err := ioutil.ReadAll(resp.Body); err != nil {
-			log.Error("<LivenewsApi> err:", err)
+		jsonData, err2 := ioutil.ReadAll(resp.Body)
+		if err2 != nil {
+			err = err2
 			return
-		} else {
-			originalNews := LivenewsOriginalData{}
-			if err := json.Unmarshal(body, &originalNews); err != nil {
-				log.Error("<LivenewsApi> err: ", err)
-				return
-			}
-			for _, livenews := range originalNews.Results {
-				if _, err := AddLivenews(livenews, p.ColLivenews.C(), p.Config.SaveImgPath); err != nil {
-					log.Error("<LivenewsApi> err: ", err)
-				} /* else if msg == "exist" {
-					log.Debug("<LivenewsApi> exist.")
-				} else {
-					log.Debug("<LivenewsApi> saved.")
-				}*/
-			}
 		}
+		err = json.Unmarshal(jsonData, &data)
 	}
+	return
+}
+
+func (p *Processor) transferNews(arr []string, originalContent string) (obj ModelLivenews, err error) {
+	if len(arr) < 12 {
+		err = errors.New("format error.")
+		return
+	}
+	obj.Type = 0
+	importanceStr := strings.TrimSpace(arr[1])
+	importanceInt, _ := strconv.Atoi(importanceStr)
+	obj.Importance = importanceInt
+	obj.PublishTime = strings.TrimSpace(arr[2])
+	obj.Content = util.ClearHtmlTags(strings.TrimSpace(arr[3]))
+	obj.Img = strings.TrimSpace(arr[6])
+	obj.OriginalId = strings.TrimSpace(arr[11])
+	obj.OriginalContent = originalContent
+	return
+}
+
+func (p *Processor) transferData(arr []string, originalContent string) (obj ModelLivenews, err error) {
+	if len(arr) < 14 {
+		err = errors.New("format error.")
+		return
+	}
+	starStr := strings.TrimSpace(arr[6])
+	star, _ := strconv.Atoi(starStr)
+	effectStr := strings.TrimSpace(arr[7])
+	effect := 0
+	switch effectStr {
+	case "利多":
+		effect = 1
+	case "利空":
+		effect = 2
+	default:
+		break
+	}
+	obj.Type = 1
+	obj.Time = strings.TrimSpace(arr[1])
+	obj.Content = strings.TrimSpace(arr[2])
+	obj.Prefix = strings.TrimSpace(arr[3])
+	obj.Predicted = strings.TrimSpace(arr[4])
+	obj.Actual = strings.TrimSpace(arr[5])
+	obj.Star = star
+	obj.Effect = effect
+	obj.PublishTime = strings.TrimSpace(arr[8])
+	obj.Country = strings.TrimSpace(arr[9])
+	obj.OriginalId = strings.TrimSpace(arr[12])
+	obj.OriginalContent = originalContent
+	return
 }
 
 func (p *Processor) AutoGetCalendar() {
