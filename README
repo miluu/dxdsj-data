@@ -1,3 +1,6 @@
+> 从 `http://m.jin10.com` 爬取新闻和数据
+
+
 mongod --dbpath "D:\mongoData"
 
 ##实时新闻api
